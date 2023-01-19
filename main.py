@@ -4,6 +4,9 @@ import termcolor
 import os
 from random import randint, choice
 
+og_colors_board = ['red', 'green', 'yellow', 'blue	', 'cyan', 'magenta']
+colors_board = og_colors_board.copy()
+
 
 def get_random_cord(height: int, width: int) -> tuple[int, int]:
     return randint(0, height-1), randint(0, width-1)
@@ -12,13 +15,17 @@ def get_random_cord(height: int, width: int) -> tuple[int, int]:
 class Game:
     WIDTH = 30
     HEIGHT = 30
+    OG_COLORS = ['red', 'green', 'blue', 'cyan', 'magenta']
 
     def __init__(self, n_snakes: int, snake_map: list[list[str]] = None):
+        self.color_map = {}
         if not snake_map:
             self.snake_map = self.create_map()
         else:
             self.snake_map = snake_map
+        self.colors = set()
         self.n_snakes = n_snakes
+        self.snakes = []
         self.snakes = [self.create_snake(4) for _ in range(n_snakes)]
         self.fruit = self._create_fruit()
 
@@ -49,12 +56,12 @@ class Game:
         xs = [(point[0] - 1, point[1]), (point[0] + 1, point[1])]
         ys = [(point[0], point[1] - 1), (point[0], point[1] + 1)]
         for x in xs:
-            if not 0 <= x[0] < len(self.snake_map):
+            if not 0 <= x[0] < self.HEIGHT - 1:
                 xs.remove(x)
             elif self.snake_map[x[0]][x[1]] != ' ':
                 xs.remove(x)
         for y in ys:
-            if not 0 <= y[1] < len(self.snake_map[0]):
+            if not 0 <= y[1] < self.WIDTH - 1:
                 ys.remove(y)
             elif self.snake_map[y[0]][y[1]] != ' ':
                 ys.remove(y)
@@ -65,7 +72,7 @@ class Game:
             body = []
             while True:
                 point = x, y = self._get_random_cord()
-                if 'snakes' in self.__dict__:
+                if self.snakes:
                     if point not in self.snakes_fields:
                         body.append((x, y))
                         break
@@ -77,7 +84,10 @@ class Game:
                 if choices:
                     body = [choice(choices)] + body
             if len(body) == length:
-                return Snake(self, body)
+                if not set(self.OG_COLORS) - self.colors:
+                    self.colors = set()
+                snake_color = random.choice(list(set(self.OG_COLORS) - self.colors))
+                return Snake(self, body, snake_color)
 
     @staticmethod
     def distance(point1: tuple[int, int], point2: tuple[int, int]) -> int:
@@ -87,6 +97,7 @@ class Game:
 
     def step(self):
         self.snake_map = self.create_map()
+        self.color_map = {}
         for snake in self.snakes:
             if snake.move():
                 snake.body.append(self.fruit)
@@ -100,15 +111,25 @@ class Game:
                     snake.body.append(direction)
             snake.snake_on_map()
         self.snake_map[self.fruit[0]][self.fruit[1]] = '*'
+        self.color_map[self.fruit] = 'light_cyan'
         self._print_map()
+        print(len(self.snakes))
         if len(self.snakes) == 0:
             exit()
 
     def _print_map(self):
         os.system('cls')
-        for i in self.snake_map:
-            a = ''.join(i)
-            termcolor.cprint(a, 'yellow')
+        termcolor.cprint('+' * (self.WIDTH + 2), 'yellow')
+        for row_idx, row in enumerate(self.snake_map):
+            line = [termcolor.colored('+', 'yellow')]
+            for col_id, sign in enumerate(row):
+                if (row_idx, col_id) in self.color_map:
+                    line.append(termcolor.colored(sign, self.color_map[(row_idx, col_id)]))
+                else:
+                    line.append(sign)
+            line.append(termcolor.colored('+', 'yellow'))
+            print(''.join(line))
+        termcolor.cprint('+' * (self.WIDTH + 2), 'yellow')
 
     def del_snake(self, snake: 'Snake'):
         for coord in snake.body:
@@ -120,9 +141,10 @@ class Snake:
     DIRECTIONS = ('<', '>', 'V', '^')
     DIR_TO_DELTA = {'<': (0, -1), '>': (0, 1), '^': (-1, 0), 'V': (1, 0)}
 
-    def __init__(self, game: 'Game', body):
+    def __init__(self, game: 'Game', body, color):
         self.game = game
         self.body = body
+        self.color = color
         self.snake_on_map()
 
     @property
@@ -140,6 +162,8 @@ class Snake:
         for cords in self.body[:-1]:
             self.game.snake_map[cords[0]][cords[1]] = '0'
         self.game.snake_map[self.body[-1][0]][self.body[-1][1]] = head_shape
+        for point in self.body:
+            self.game.color_map[point] = self.color
 
     def set_direction(self):
         current_snakes = self.game.snakes
@@ -171,6 +195,6 @@ class Snake:
 
 
 while True:
-    game = Game(8)
+    game = Game(15)
     while True:
         game.step()
