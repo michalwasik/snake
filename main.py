@@ -6,12 +6,12 @@ from random import randint, choice
 
 
 def get_random_cord(height: int, width: int) -> tuple[int, int]:
-    return randint(0, height), randint(0, width)
+    return randint(0, height-1), randint(0, width-1)
 
 
 class Game:
-    WIDTH = 40
-    HEIGHT = 40
+    WIDTH = 30
+    HEIGHT = 30
 
     def __init__(self, n_snakes: int, snake_map: list[list[str]] = None):
         if not snake_map:
@@ -25,21 +25,25 @@ class Game:
     @classmethod
     def create_map(cls):
         snake_map: list[list[str]] = [[' ' for _ in range(cls.WIDTH)] for _ in range(cls.HEIGHT)]
-        for idx, row in enumerate(snake_map):
-            snake_map[idx] = ['+'] + row + ['+']
-        snake_map = ['+' * (cls.WIDTH + 2)] + snake_map + ['+' * (cls.WIDTH + 2)]
         return snake_map
+
+    @property
+    def snakes_fields(self):
+        field = []
+        if self.snakes:
+            for snake in self.snakes:
+                field += snake.body
+        return field
 
     def _create_fruit(self):
         while True:
-            rand_cort = self._get_random_cord()
-            if self.snake_map[rand_cort[0]][rand_cort[1]] == ' ':
-                self.snake_map[rand_cort[0]][rand_cort[1]] = '*'
-                return rand_cort
+            rand_cord = self._get_random_cord()
+            if rand_cord not in self.snakes_fields:
+                return rand_cord
 
     def _get_random_cord(self):
-        _y, _x = get_random_cord(self.HEIGHT, self.WIDTH)
-        return _y + 1, _x + 1
+        _x, _y = get_random_cord(self.HEIGHT, self.WIDTH)
+        return _x , _y
 
     def available_neigh(self, point: tuple[int, int]):
         xs = [(point[0] - 1, point[1]), (point[0] + 1, point[1])]
@@ -60,13 +64,13 @@ class Game:
         while True:
             body = []
             while True:
-                y, x = self._get_random_cord()
-                # print(self.snake_map)
-                # print(y, x)
-                # print(len(self.snake_map[0]), len(self.snake_map))
-                if self.snake_map[x][y] == ' ':
-                    body.append((x, y))
-                    break
+                point = x, y = self._get_random_cord()
+                if 'snakes' in self.__dict__:
+                    if point not in self.snakes_fields:
+                        body.append((x, y))
+                        break
+                body.append(point)
+                break
             for _ in range(length - 1):
                 choices = self.available_neigh(body[0])
                 choices = [point for point in choices if point not in body]
@@ -75,35 +79,27 @@ class Game:
             if len(body) == length:
                 return Snake(self, body)
 
+    @staticmethod
+    def distance(point1: tuple[int, int], point2: tuple[int, int]) -> int:
+        height = abs(point1[0]-point2[0])
+        width = abs(point1[1] - point2[1])
+        return height + width
+
     def step(self):
-        # print(self.snakes)
+        self.snake_map = self.create_map()
         for snake in self.snakes:
-            # print(snake)
             if snake.move():
-                self.snake_map[self.fruit[0]][self.fruit[1]] = snake.set_direction()
-                self.snake_map[snake.body[-1][0]][snake.body[-1][1]] = '0'
                 snake.body.append(self.fruit)
-                self.fruit = None
+                self.fruit = self._create_fruit()
             else:
                 direction = snake.set_direction()
                 if not direction:
                     self.del_snake(snake)
                 else:
-                    self.snake_map[snake.body[0][0]][snake.body[0][1]] = ' '
                     snake.body = snake.body[1:]
-                    change = snake.DIR_TO_DELTA[direction]
-                    new_point = (snake.body[-1][0] + change[0], snake.body[-1][1] + change[1])
-                    if self.snake_map[new_point[0]][new_point[1]] != ' ':
-                        self.del_snake(snake)
-                    else:
-                        self.snake_map[snake.body[-1][0]][snake.body[-1][1]] = '0'
-                        # print(f'{new_point= }')
-                        # print(f'{direction= }')
-                        # print(f'{self.snake_map[new_point[0]][new_point[1]] = }')
-                        self.snake_map[new_point[0]][new_point[1]] = direction
-                        snake.body.append(new_point)
-        if not self.fruit:
-            self.fruit = self._create_fruit()
+                    snake.body.append(direction)
+            snake.snake_on_map()
+        self.snake_map[self.fruit[0]][self.fruit[1]] = '*'
         self._print_map()
         if len(self.snakes) == 0:
             exit()
@@ -146,50 +142,35 @@ class Snake:
         self.game.snake_map[self.body[-1][0]][self.body[-1][1]] = head_shape
 
     def set_direction(self):
+        current_snakes = self.game.snakes
+        taken_fields = []
+        for snake in current_snakes:
+            taken_fields += snake.body
         head = self.body[-1]
         ways = self.game.available_neigh(head)
         if not ways:
             return None
-        poss_neigh = [(x-head[0], y-head[1]) for x, y in ways]
+        can_move = [x for x in ways if x not in taken_fields]
+        if not can_move:
+            return None
         if not self.game.fruit:
-            # print(poss_neigh)
-            destination = random.choice(poss_neigh)
-            for key, value in self.DIR_TO_DELTA.items():
-                if value == destination:
-                    return key
-        elif head[0] != self.game.fruit[0]:
-            if head[0] > self.game.fruit[0]:
-                dream = '^'
-            else:
-                dream = 'V'
+            destination = random.choice(can_move)
+            return destination
         else:
-            if head[1] > self.game.fruit[1]:
-                dream = '<'
-            else:
-                dream = '>'
-        shift = self.DIR_TO_DELTA[dream]
-        # print(shift)
-        if shift in poss_neigh:
-            return dream
-        else:
-            destination = random.choice(poss_neigh)
-            for key, value in self.DIR_TO_DELTA.items():
-                if value == destination:
-                    return key
+            can_move.sort(key=lambda x: self.game.distance(x, self.game.fruit))
+            return can_move[0]
 
     def move(self, grow: bool = False):
         if not self.game.fruit:
             return False
         head = self.body[-1]
-        # print(f'{self.game.fruit =}')
-        # print(f'{self.body =}')
-        distance = abs(sum(map(lambda x, y: x - y, head, self.game.fruit)))
+        distance = self.game.distance(head, self.game.fruit)
         if distance == 1:
             grow = True
         return grow
 
 
 while True:
-    game = Game(4)
+    game = Game(8)
     while True:
         game.step()
